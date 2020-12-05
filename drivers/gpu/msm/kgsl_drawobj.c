@@ -34,18 +34,6 @@
 static struct kmem_cache *memobjs_cache;
 static struct kmem_cache *sparseobjs_cache;
 
-static void free_fence_names(struct kgsl_drawobj_sync *syncobj)
-{
-	unsigned int i;
-
-	for (i = 0; i < syncobj->numsyncs; i++) {
-		struct kgsl_drawobj_sync_event *event = &syncobj->synclist[i];
-
-		if (event->type == KGSL_CMD_SYNCPOINT_TYPE_FENCE)
-			kfree(event->info.fences);
-	}
-}
-
 void kgsl_drawobj_destroy_object(struct kref *kref)
 {
 	struct kgsl_drawobj *drawobj = container_of(kref,
@@ -378,8 +366,7 @@ static int drawobj_add_sync_fence(struct kgsl_device *device,
 	set_bit(event->id, &syncobj->pending);
 
 	event->handle = kgsl_sync_fence_async_wait(sync->fd,
-				drawobj_sync_fence_func, event,
-				&event->info);
+				drawobj_sync_fence_func, event);
 
 	if (IS_ERR_OR_NULL(event->handle)) {
 		int ret = PTR_ERR(event->handle);
