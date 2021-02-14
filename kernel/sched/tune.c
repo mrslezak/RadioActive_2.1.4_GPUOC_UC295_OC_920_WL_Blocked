@@ -162,7 +162,7 @@ root_schedtune = {
  *    implementation especially for the computation of the per-CPU boost
  *    value
  */
-#define BOOSTGROUPS_COUNT 6
+#define BOOSTGROUPS_COUNT 8
 
 /* Array of configured boostgroups */
 static struct schedtune *allocated_group[BOOSTGROUPS_COUNT] = {
@@ -287,14 +287,14 @@ static void
 schedtune_cpu_update(int cpu, u64 now)
 {
 	struct boost_groups *bg = &per_cpu(cpu_boost_groups, cpu);
-	int boost_max;
+	int boost_max = INT_MIN;
 	u64 boost_ts;
 	int idx;
 
 	/* The root boost group is always active */
 	boost_max = bg->group[0].boost;
 	boost_ts = now;
-	for (idx = 1; idx < BOOSTGROUPS_COUNT; ++idx) {
+	for (idx = 0; idx < BOOSTGROUPS_COUNT; ++idx) {
 
 		/* Ignore non boostgroups not mapping a cgroup */
 		if (!bg->group[idx].valid)
@@ -316,10 +316,9 @@ schedtune_cpu_update(int cpu, u64 now)
 		boost_ts =  bg->group[idx].ts;
 	}
 
-	/* Ensures boost_max is non-negative when all cgroup boost values
-	 * are neagtive. Avoids under-accounting of cpu capacity which may cause
-	 * task stacking and frequency spikes.*/
-	boost_max = max(boost_max, 0);
+	/* If there are no active boost groups on the CPU, set no boost  */
+	if (boost_max == INT_MIN)
+		boost_max = 0;
 	bg->boost_max = boost_max;
 	bg->boost_ts = boost_ts;
 }
@@ -815,9 +814,9 @@ static void write_default_values(struct cgroup_subsys_state *css)
 	static struct st_data st_targets[] = {
 		{ "audio-app",	0, 0, 0, 0 },
 		{ "background",	-30, 0, 0, 0 },
-		{ "foreground",	0, 1, 0, 1 },
+		{ "foreground",	0, 1, 0, 0 },
 		{ "rt",		0, 0, 0, 0 },
-		{ "top-app",	5, 1, 0, 1 },
+		{ "top-app",	5, 1, 0, 0 },
 	};
 	int i;
 
@@ -855,7 +854,7 @@ schedtune_css_alloc(struct cgroup_subsys_state *parent_css)
 		return ERR_PTR(-ENOMEM);
 	}
 
-	for (idx = 1; idx < BOOSTGROUPS_COUNT; ++idx) {
+	for (idx = 0; idx < BOOSTGROUPS_COUNT; ++idx) {
 		if (!allocated_group[idx])
 			break;
 #ifdef CONFIG_STUNE_ASSIST
